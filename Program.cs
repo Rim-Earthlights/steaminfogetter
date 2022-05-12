@@ -18,10 +18,14 @@ namespace SteamInfoGetter {
                 Console.Write("Game Name >");
                 var inputGameName = Console.ReadLine();
 
+                // uriにするためencodeを挟む
                 var encodedgameName = HttpUtility.HtmlEncode(inputGameName);
+
+                // クッキーつけて検索urlへget送信
                 webWrapper.cc = new System.Net.CookieContainer();
                 var html = await webWrapper.GetAsync("https://store.steampowered.com/search/?term=" + encodedgameName);
 
+                // レスポンスをパースして中身を取り出す
                 var parser = new HtmlParser();
                 var doc = await parser.ParseDocumentAsync(html);
                 var elements = doc.QuerySelectorAll(".search_result_row");
@@ -30,6 +34,7 @@ namespace SteamInfoGetter {
 
                 Console.WriteLine();
 
+                // 結果からゲーム名だけ抽出して一致するまで回す
                 foreach (var element in elements) {
                     var gameName = element.QuerySelector(".responsive_search_name_combined .title").InnerHtml;
                     Console.WriteLine(" * " + gameName);
@@ -50,12 +55,14 @@ namespace SteamInfoGetter {
 
                 Console.WriteLine();
 
+                // 見つからなかったら検索の一番上から順に聞いていく
+                // ミスタイプだったりするとめんどくさいので[C]でbreakする
                 if (gameUrl == null) {
                     Console.WriteLine("not found game name;");
                     foreach (var element in elements) {
                         var gameName = element.QuerySelector(".responsive_search_name_combined .title").InnerHtml;
                         Console.WriteLine(" * " + gameName);
-                        Console.Write("\nCollect Game? ([Y]es/[N]o/[C]ancel): ");
+                        Console.Write(Environment.NewLine + "Collect Game? ([Y]es/[N]o/[C]ancel): ");
                         string ans = Console.ReadLine().ToUpper();
                         Console.WriteLine();
                         if (ans.ToUpper() == "Y" || ans == "") {
@@ -73,12 +80,13 @@ namespace SteamInfoGetter {
                     }
                 }
 
+                // ゲームが特定出来たらストアページをgetする
                 html = await webWrapper.GetAsync(gameUrl);
                 doc = await parser.ParseDocumentAsync(html);
 
                 try {
+                    // 年齢確認に引っかかった場合
                     if (doc.GetElementById("ageDay") != null) {
-                        // 年齢確認
                         // ~$ curl 'https://store.steampowered.com/app/980830/Spirit_Hunter_Death_Mark/?snr=1_7_7_151_150_1'
                         var script = doc.QuerySelectorAll(".game_page_background > script")[1].InnerHtml;
                         // var g_sessionID = "14fbd310060d8409759facd0";
@@ -88,6 +96,7 @@ namespace SteamInfoGetter {
 
                         var postUrl = "https://store.steampowered.com/agecheckset/" + appId;
 
+                        // 年齢確認に必要なクエリを作ってPOSTする
                         var query = new Dictionary<string, string>() {
                             { "sessionid", sessionId },
                             { "ageDay", "1" },
@@ -97,6 +106,7 @@ namespace SteamInfoGetter {
 
                         var post = await webWrapper.PostAsync(postUrl, query);
                         if (post.Contains("success")) {
+                            // 通ったら改めてget
                             html = await webWrapper.GetAsync(gameUrl);
                             doc = await parser.ParseDocumentAsync(html);
                         }
@@ -105,6 +115,7 @@ namespace SteamInfoGetter {
                         }
                     }
 
+                    // 各種情報の取得
                     var gameName = doc.QuerySelector("#appHubAppName").InnerHtml;
                     var reviews = doc.QuerySelectorAll(".game_review_summary");
                     var reviewRecently = reviews[0].InnerHtml;
@@ -123,17 +134,23 @@ namespace SteamInfoGetter {
                         price = purchase.QuerySelector(".game_purchase_price").InnerHtml.Trim('\t', '\n');
                     }
                     catch (NullReferenceException) {
+                        // 割引かかってる場合は割引前の金額を取得する
                         price = purchase.QuerySelector("div .discount_original_price").InnerHtml.Trim('\t', '\n');
                     }
+
+                    // タグ名整形
                     var tags = doc.QuerySelectorAll(".popular_tags > .app_tag");
                     var tagNames = tags.Where(x => x.InnerHtml.Trim('\t', '\n') != "+").Select(x => x.InnerHtml.Trim('\t', '\n')).ToList();
 
+                    // スプレッドシートのサムネ取得用
                     var headerUrl = "image(\"" + doc.QuerySelector(".game_header_image_full").GetAttribute("src") + "\")";
 
+                    // スプレッドシートのストアページ転送用
                     var hyperLink = String.Format("=hyperlink(\"{0}\", {1})", gameUrl, headerUrl);
 
                     var buyDate = DateTime.Now.ToString("yyyy/MM/dd");
 
+                    // show info
                     Console.WriteLine("Header: {0}", hyperLink);
                     Console.WriteLine("Game Name: {0}", gameName);
                     Console.WriteLine("Price: {0}", price);
@@ -158,6 +175,7 @@ namespace SteamInfoGetter {
 
                     _text = String.Join('\t', printLine);
 
+                    // クリップボードにコピーする
                     Thread thread = new Thread(ClipBoardSetter);
                     thread.SetApartmentState(ApartmentState.STA);
                     thread.Start();
@@ -172,6 +190,9 @@ namespace SteamInfoGetter {
             } while (true);
         }
 
+        /// <summary>
+        /// クリップボードにデータをコピーする
+        /// </summary>
         private static void ClipBoardSetter() {
             Clipboard.SetData(DataFormats.Text, _text);
         }

@@ -80,7 +80,7 @@ namespace SteamInfoGetter {
                     if (doc.GetElementById("ageDay") != null) {
                         // 年齢確認
                         // ~$ curl 'https://store.steampowered.com/app/980830/Spirit_Hunter_Death_Mark/?snr=1_7_7_151_150_1'
-                            var script = doc.QuerySelectorAll(".game_page_background > script")[1].InnerHtml;
+                        var script = doc.QuerySelectorAll(".game_page_background > script")[1].InnerHtml;
                         // var g_sessionID = "14fbd310060d8409759facd0";
                         var sessionId = Regex.Match(script, @"var g_sessionID = "".+""").Value;
                         sessionId = Regex.Match(sessionId, @"(?<="").*?(?="")").Value;
